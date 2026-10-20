@@ -16,6 +16,8 @@ struct MainView: View {
     @State private var searchText = ""
     /// `nil` while a search is in flight.
     @State private var searchResults: SearchResults? = SearchResults()
+    /// Where the sidebar was before a search cleared its selection, restored when the search is emptied.
+    @State private var selectionBeforeSearch: SidebarItem?
 
     var body: some View {
         NavigationSplitView {
@@ -41,7 +43,23 @@ struct MainView: View {
                 PlayerBar(player: player, openArtist: openCurrentArtist)
             }
         }
-        .onChange(of: selection) { path = NavigationPath() }
+        .onChange(of: selection) { _, selection in
+            path = NavigationPath()
+            // Choosing a sidebar item leaves the search results.
+            if selection != nil, !searchText.isEmpty { searchText = "" }
+        }
+        // Searching clears the sidebar highlight, like Music.app, so clicking any item (even the previous
+        // one) is a change that leaves the search.
+        .onChange(of: searchText.isEmpty) { _, isEmpty in
+            if !isEmpty {
+                if selection != nil {
+                    selectionBeforeSearch = selection
+                    selection = nil
+                }
+            } else if selection == nil {
+                selection = selectionBeforeSearch ?? .home
+            }
+        }
         .task { await music.refreshAll() }
         .task(id: searchText) {
             searchResults = nil
