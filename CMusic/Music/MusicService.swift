@@ -246,6 +246,46 @@ final class MusicService {
         }
     }
 
+    /// Everything the artist page shows. A library artist is matched to its catalog counterpart,
+    /// since top songs, stations and similar artists only exist in the catalog.
+    func details(for artist: Artist) async -> ArtistDetails {
+        let relationships: [PartialMusicAsyncProperty<Artist>] = [.topSongs, .albums, .singles, .station, .similarArtists]
+        var detailed = try? await artist.with(relationships)
+        if detailed?.topSongs?.isEmpty ?? true, let catalog = await catalogArtist(named: artist.name) {
+            detailed = (try? await catalog.with(relationships)) ?? catalog
+        }
+        guard let detailed else { return ArtistDetails(artist: artist) }
+        let details = ArtistDetails(
+            artist: detailed,
+            topSongs: detailed.topSongs.map(Array.init) ?? [],
+            albums: detailed.albums.map(Array.init) ?? [],
+            singles: detailed.singles.map(Array.init) ?? [],
+            station: detailed.station,
+            similarArtists: detailed.similarArtists.map(Array.init) ?? [],
+            bio: (detailed.editorialNotes?.standard ?? detailed.editorialNotes?.short)?.strippingHTML
+        )
+        let artwork = ArtworkLoader.shared
+        artwork.prefetch(details.topSongs.prefix(5).map(\.artwork), points: 40)
+        artwork.prefetch(details.albums.prefix(8).map(\.artwork), points: Metrics.tileWidth)
+        return details
+    }
+
+    private func catalogArtist(named name: String) async -> Artist? {
+        var request = MusicCatalogSearchRequest(term: name, types: [Artist.self])
+        request.limit = 5
+        let artists = (try? await request.response().artists) ?? []
+        return artists.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame } ?? artists.first
+    }
+
+    /// The station for a top result's artist, album or playlist, fetched on demand for the "Mix" button.
+    func station(for artist: Artist) async -> Station? {
+        try? await artist.with([.station]).station
+    }
+
+    func topSongs(for artist: Artist) async -> [Song] {
+        (try? await artist.with([.topSongs]).topSongs).map(Array.init) ?? []
+    }
+
     /// Searches the catalog across every kind of item at once, like Music.app's search page.
     func search(_ term: String) async -> SearchResults {
         guard !term.isEmpty else { return SearchResults() }
@@ -287,5 +327,27 @@ struct SearchResults: Equatable {
 
     var isEmpty: Bool {
         topResults.isEmpty && artists.isEmpty && albums.isEmpty && songs.isEmpty && playlists.isEmpty
+    }
+}
+
+struct ArtistDetails: Equatable {
+    var artist: Artist
+    var topSongs: [Song] = []
+    var albums: [Album] = []
+    var singles: [Album] = []
+    var station: Station?
+    var similarArtists: [Artist] = []
+    var bio: String?
+}
+
+private extension String {
+    /// Editorial notes arrive as HTML snippets; the page shows them as plain text.
+    var strippingHTML: String {
+        replacingOccurrences(of: "<br */?>", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

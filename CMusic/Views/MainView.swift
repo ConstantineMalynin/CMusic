@@ -109,7 +109,7 @@ struct MainView: View {
         switch destination {
         case .album(let album): CollectionDetailView(album: album, music: music)
         case .playlist(let playlist): CollectionDetailView(playlist: playlist, music: music)
-        case .artist(let artist): ArtistsView(artists: [artist])
+        case .artist(let artist): ArtistDetailView(artist: artist).id(artist.id)
         }
     }
 }

@@ -188,22 +188,8 @@ struct ShelfTile<Item: TileDisplayable & Hashable>: View {
                 MediaTile(item: item, isCircle: isCircle, play: play)
             }
         }
-        .modifier(DestinationLink(item: item))
+        .modifier(DestinationLinkModifier(item: item))
         .simultaneousGesture(TapGesture(count: 2).onEnded { play?() })
-    }
-}
-
-/// Navigates to album/playlist details; other item types are left as-is.
-private struct DestinationLink<Item: Hashable>: ViewModifier {
-    var item: Item
-
-    func body(content: Content) -> some View {
-        if let destination = Destination(item) {
-            NavigationLink(value: destination) { content }
-                .buttonStyle(.plain)
-        } else {
-            content
-        }
     }
 }
 

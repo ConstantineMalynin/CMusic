@@ -6,31 +6,44 @@
 import MusicKit
 import SwiftUI
 
-/// Catalog search results grouped by kind: top results, artists, songs, albums and playlists.
+/// Catalog search results: the top result beside its first songs, then more songs, artists, albums and playlists.
 struct SearchView: View {
     var term: String
     /// `nil` while the search is running.
     var results: SearchResults?
 
     @Environment(PlayerModel.self) private var player
-    @State private var showsAllSongs = false
-
-    private static let collapsedSongCount = 8
 
     var body: some View {
         ScrollView {
             if let results {
                 LazyVStack(alignment: .leading, spacing: 32) {
-                    Shelf(title: "Top Results", items: results.topResults, tileWidth: Metrics.featureTileWidth) { item in
-                        ShelfTile(item: item) { player.play(item) }
+                    if let top = results.topResults.first {
+                        HStack(alignment: .top, spacing: 16) {
+                            TopResultCard(item: top)
+                                .frame(maxWidth: .infinity)
+                            if !results.songs.isEmpty {
+                                VStack(spacing: 2) {
+                                    ForEach(results.songs.prefix(3)) { song in
+                                        SongRow(song: song, isCurrent: song.id == player.currentItemID) {
+                                            player.play(results.songs, startingAt: song)
+                                        }
+                                    }
+                                }
+                                .padding(6)
+                                .frame(maxWidth: .infinity)
+                                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                            }
+                        }
+                        .padding(.horizontal, Metrics.margin)
+                    }
+
+                    SongList(title: "Songs", songs: results.songs, collapsedCount: 8) { song in
+                        player.play(results.songs, startingAt: song)
                     }
 
                     Shelf(title: "Artists", items: results.artists) { artist in
                         ShelfTile(item: artist, isCircle: true)
-                    }
-
-                    if !results.songs.isEmpty {
-                        songs(results.songs)
                     }
 
                     Shelf(title: "Albums", items: results.albums) { album in
@@ -53,83 +66,106 @@ struct SearchView: View {
                 ContentUnavailableView.search(text: term)
             }
         }
-        .onChange(of: term) { showsAllSongs = false }
         .navigationTitle("Search")
     }
+}
 
-    private func songs(_ songs: [Song]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Songs").font(.title2.bold())
-                Spacer()
-                if songs.count > Self.collapsedSongCount {
-                    Button(showsAllSongs ? "Show Less" : "Show All") { showsAllSongs.toggle() }
-                        .buttonStyle(.borderless)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.horizontal, Metrics.margin)
+/// The best match, with Play/Shuffle and a Mix button where a station exists. Clicking the artwork or
+/// title opens the item's page when it has one.
+private struct TopResultCard: View {
+    var item: MusicCatalogSearchResponse.TopResult
 
-            let shown = showsAllSongs ? songs : Array(songs.prefix(Self.collapsedSongCount))
-            VStack(spacing: 2) {
-                ForEach(shown) { song in
-                    SongRow(song: song, isCurrent: song.id == player.currentItemID) {
-                        player.play(songs, startingAt: song)
+    @Environment(MusicService.self) private var music
+    @Environment(PlayerModel.self) private var player
+
+    private var isArtist: Bool {
+        if case .artist = item { true } else { false }
+    }
+
+    var body: some View {
+        HStack(spacing: 20) {
+            identity
+                .modifier(DestinationLinkModifier(item: item))
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(item.tileTitle)
+                    .font(.title.bold())
+                    .lineLimit(2)
+                Text(item.tileSubtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                HStack {
+                    if isArtist {
+                        Button("Shuffle", systemImage: "shuffle", action: shuffleArtist)
+                            .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Play", systemImage: "play.fill") { player.play(item) }
+                            .buttonStyle(.borderedProminent)
+                    }
+                    if canMix {
+                        Button("Mix", systemImage: "dot.radiowaves.left.and.right", action: mix)
+                            .buttonStyle(.bordered)
                     }
                 }
+                .padding(.top, 4)
             }
-            .padding(.horizontal, Metrics.margin - 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(20)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var identity: some View {
+        ArtworkView(artwork: item.tileArtwork, cornerRadius: 8, isCircle: isArtist, shadowRadius: 8, side: 110)
+    }
+
+    private var canMix: Bool {
+        switch item {
+        case .artist, .song, .album: true
+        default: false
+        }
+    }
+
+    private func shuffleArtist() {
+        guard case .artist(let artist) = item else { return }
+        Task {
+            let songs = await music.topSongs(for: artist)
+            if !songs.isEmpty { player.play(songs.shuffled()) }
+        }
+    }
+
+    private func mix() {
+        Task {
+            var station: Station?
+            switch item {
+            case .artist(let artist):
+                station = await music.station(for: artist)
+            case .song(let song):
+                station = try? await song.with([.station]).station
+            case .album(let album):
+                if let artist = try? await album.with([.artists]).artists?.first {
+                    station = await music.station(for: artist)
+                }
+            default:
+                break
+            }
+            if let station { player.play(station) }
         }
     }
 }
 
-/// One line per song with artwork, title, artist and duration. Double-click or the hover play button plays it.
-private struct SongRow: View {
-    var song: Song
-    var isCurrent: Bool
-    var play: () -> Void
+/// Wraps a view in a navigation link when the item has a page.
+struct DestinationLinkModifier<Item: Hashable>: ViewModifier {
+    var item: Item
 
-    @State private var isHovering = false
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ArtworkView(artwork: song.artwork, cornerRadius: 4, side: 40)
-                .overlay {
-                    if isHovering {
-                        Button(action: play) {
-                            Image(systemName: "play.fill")
-                                .font(.body.bold())
-                                .foregroundStyle(.white)
-                                .frame(width: 40, height: 40)
-                                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 4))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(song.title).fontWeight(isCurrent ? .semibold : .medium)
-                    if song.contentRating == .explicit { ExplicitBadge() }
-                }
-                Text(song.albumTitle.map { "\(song.artistName) — \($0)" } ?? song.artistName)
-                    .foregroundStyle(.secondary)
-            }
-            .font(.callout)
-            .lineLimit(1)
-
-            Spacer(minLength: 16)
-
-            Text((song.duration ?? 0).formattedDuration)
-                .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
+    func body(content: Content) -> some View {
+        if let destination = Destination(item) {
+            NavigationLink(value: destination) { content }
+                .buttonStyle(.plain)
+        } else {
+            content
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(isHovering ? Color.primary.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 6))
-        .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
-        .onTapGesture(count: 2, perform: play)
-        .contextMenu { Button("Play", action: play) }
     }
 }
