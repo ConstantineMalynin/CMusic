@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="CMusic — a fast Apple Music client for macOS">
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1B1030"/>
+      <stop offset="1" stop-color="#2C0F3F"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#E9407A" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#E9407A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="text" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF8A5B"/>
+      <stop offset="0.5" stop-color="#E9407A"/>
+      <stop offset="1" stop-color="#A26BFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#page)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <svg x="120" y="170" width="300" height="300" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="logo-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF8A5B"/>
+      <stop offset="0.5" stop-color="#E9407A"/>
+      <stop offset="1" stop-color="#6A2BD9"/>
+    </linearGradient>
+    <radialGradient id="logo-shine" cx="0.3" cy="0.2" r="0.8">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="logo-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#2A0A4A" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="228" fill="url(#logo-bg)"/>
+  <rect width="1024" height="1024" rx="228" fill="url(#logo-shine)"/>
+  <!-- Forward lean for speed -->
+  <g transform="translate(560 512) skewX(-12) translate(-512 -512)">
+    <!-- Speed lines -->
+    <g stroke="#fff" stroke-linecap="round" filter="url(#logo-shadow)">
+      <path d="M150 412 H40" stroke-width="30" stroke-opacity="0.9"/>
+      <path d="M130 512 H0" stroke-width="30" stroke-opacity="0.65"/>
+      <path d="M150 612 H60" stroke-width="30" stroke-opacity="0.4"/>
+    </g>
+    <g fill="none" stroke="#fff" stroke-linecap="round" filter="url(#logo-shadow)">
+    <!-- The "C": an open record -->
+    <path d="M724 300 A300 300 0 1 0 724 724" stroke-width="100"/>
+    <!-- Grooves -->
+    <path d="M660.5 363.5 A210 210 0 1 0 660.5 660.5" stroke-width="16" stroke-opacity="0.55"/>
+    </g>
+    <!-- Eighth note -->
+    <g fill="#fff" filter="url(#logo-shadow)">
+    <ellipse cx="478" cy="592" rx="64" ry="47" transform="rotate(-22 478 592)"/>
+    <rect x="516" y="372" width="28" height="222" rx="14"/>
+    <path d="M530 372 C 560 420, 640 430, 628 520 C 620 470, 580 455, 530 448 Z"/>
+    </g>
+  </g>
+</svg>
+  <text x="480" y="335" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-size="128" font-weight="800" font-style="italic" letter-spacing="-3" fill="url(#text)">CMusic</text>
+  <text x="484" y="405" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif" font-size="38" font-weight="500" fill="#EDE6F5" fill-opacity="0.85"><tspan font-weight="800" font-style="italic" fill="#FF8A5B" fill-opacity="1">Fast.</tspan> Native. Apple Music for macOS.</text>
+</svg>
