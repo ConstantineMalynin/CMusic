@@ -62,8 +62,8 @@ CMusic's speed comes from a handful of deliberate choices, not from cutting feat
 
 ## Download
 
-1. Grab the latest `CMusic.dmg` from **[Releases](https://github.com/ConstantineMalynin/CMusic/releases/latest)**.
-2. Drag **CMusic** into your Applications folder.
+1. Grab the latest `CMusic-<version>.zip` from **[Releases](https://github.com/ConstantineMalynin/CMusic/releases/latest)**.
+2. Unzip it and drag **CMusic** into your Applications folder.
 3. Open it and allow access to Apple Music when asked.
 
 Releases are signed with a Developer ID and notarized by Apple, so they open without Gatekeeper warnings.

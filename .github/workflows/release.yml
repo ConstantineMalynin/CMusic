@@ -1,0 +1,73 @@
+# Every push to main becomes a signed, notarized GitHub release: CMusic <MARKETING_VERSION>.<commit count>.
+#
+# Secrets (Settings › Secrets and variables › Actions):
+#   DEVELOPER_ID_P12          base64 of the "Developer ID Application" certificate + private key (.p12)
+#   DEVELOPER_ID_P12_PASSWORD the .p12 export password
+#   ASC_KEY_JSON              the contents of ~/.config/asc/key.json ({"key_id", "issuer_id", "key"})
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - LICENSE
+      - assets/**
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # The app targets macOS 27, which needs Xcode 27. This image is GitHub's preview; move to macos-27 when it ships.
+    runs-on: xcode-27
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the version is derived from the commit count
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_27*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Import Developer ID certificate
+        env:
+          P12_BASE64: ${{ secrets.DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$P12_PASSWORD" -k "$KEYCHAIN" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Install App Store Connect key
+        env:
+          ASC_KEY_JSON: ${{ secrets.ASC_KEY_JSON }}
+        run: |
+          mkdir -p ~/.config/asc
+          printf '%s' "$ASC_KEY_JSON" > ~/.config/asc/key.json
+
+      - name: Build, notarize and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          scripts/release.sh
+
+      - name: Clean up
+        if: always()
+        run: rm -rf ~/.config/asc "$RUNNER_TEMP/signing.keychain-db"

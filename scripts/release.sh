@@ -1,14 +1,21 @@
 #!/bin/bash
 # Builds CMusic, signs it with Developer ID, notarizes it and publishes it as a GitHub release.
 #
-# Usage: scripts/release.sh 1.1
+# Usage: scripts/release.sh 1.1          # explicit version
+#        scripts/release.sh              # <MARKETING_VERSION>.<commit count>, as CI does on every push to main
 #
 # Needs a "Developer ID Application" certificate in the keychain and an App Store Connect API key
-# at ~/.config/asc/key.json ({"key_id", "issuer_id", "key"}) for notarization.
+# at ~/.config/asc/key.json ({"key_id", "issuer_id", "key"}) for signing and notarization.
 set -euo pipefail
 
-VERSION=${1:?usage: scripts/release.sh <version>}
 cd "$(dirname "$0")/.."
+
+if [[ $# -ge 1 ]]; then
+    VERSION=$1
+else
+    BASE=$(sed -n 's/.*MARKETING_VERSION = \([0-9.]*\);.*/\1/p' CMusic.xcodeproj/project.pbxproj | head -1)
+    VERSION="$BASE.$(git rev-list --count HEAD)"
+fi
 
 [[ -z $(git status --porcelain) ]] || { echo "Commit or stash changes first." >&2; exit 1; }
 git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null && { echo "v$VERSION already exists." >&2; exit 1; }
@@ -18,22 +25,6 @@ BUILD=$(git rev-list --count HEAD)
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-echo "==> Archiving $VERSION ($BUILD)"
-xcodebuild archive -quiet \
-    -project CMusic.xcodeproj -scheme CMusic -configuration Release \
-    -destination 'generic/platform=macOS' \
-    -archivePath "$OUT/CMusic.xcarchive" \
-    -allowProvisioningUpdates \
-    MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD"
-
-echo "==> Exporting with Developer ID"
-xcodebuild -exportArchive -quiet \
-    -archivePath "$OUT/CMusic.xcarchive" \
-    -exportOptionsPlist scripts/ExportOptions.plist \
-    -exportPath "$OUT" \
-    -allowProvisioningUpdates
-
-echo "==> Notarizing"
 KEY_DIR=$(mktemp -d)
 trap 'rm -rf "$KEY_DIR"' EXIT
 read -r KEY_ID ISSUER < <(python3 - "$KEY_DIR/AuthKey.p8" <<'EOF'
@@ -44,6 +35,25 @@ with open(sys.argv[1], "w") as f:
 print(key["key_id"], key["issuer_id"])
 EOF
 )
+# Lets automatic signing reach App Store Connect without a signed-in Xcode account, as on CI.
+AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY_DIR/AuthKey.p8" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER")
+
+echo "==> Archiving $VERSION ($BUILD)"
+xcodebuild archive -quiet \
+    -project CMusic.xcodeproj -scheme CMusic -configuration Release \
+    -destination 'generic/platform=macOS' \
+    -archivePath "$OUT/CMusic.xcarchive" \
+    "${AUTH[@]}" \
+    MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD"
+
+echo "==> Exporting with Developer ID"
+xcodebuild -exportArchive -quiet \
+    -archivePath "$OUT/CMusic.xcarchive" \
+    -exportOptionsPlist scripts/ExportOptions.plist \
+    -exportPath "$OUT" \
+    "${AUTH[@]}"
+
+echo "==> Notarizing"
 ditto -c -k --keepParent "$OUT/CMusic.app" "$OUT/notarize.zip"
 xcrun notarytool submit "$OUT/notarize.zip" --key "$KEY_DIR/AuthKey.p8" --key-id "$KEY_ID" --issuer "$ISSUER" --wait
 xcrun stapler staple "$OUT/CMusic.app"
