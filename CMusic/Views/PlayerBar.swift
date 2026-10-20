@@ -6,7 +6,7 @@
 import MusicKit
 import SwiftUI
 
-/// The bar along the bottom of the window: now playing, transport controls over a scrubber, and lyrics/queue buttons.
+/// The bar along the bottom of the window: now playing, and transport controls over a scrubber.
 /// Volume follows the system output, since `ApplicationMusicPlayer` exposes no volume control.
 struct PlayerBar: View {
     var player: PlayerModel
@@ -24,16 +24,9 @@ struct PlayerBar: View {
             }
             .frame(minWidth: 360, idealWidth: 520, maxWidth: 600)
 
-            HStack(spacing: 14) {
-                Button("Lyrics", systemImage: "quote.bubble") {}
-                    .help("Lyrics")
-                Button("Playing Next", systemImage: "list.bullet") {}
-                    .help("Playing Next")
-            }
-            .labelStyle(.iconOnly)
-            .buttonStyle(.borderless)
-            .font(.title3)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            // Mirrors the now-playing column so the transport controls stay centered.
+            Color.clear
+                .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
