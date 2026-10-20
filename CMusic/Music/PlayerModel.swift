@@ -121,8 +121,15 @@ final class PlayerModel {
         }
     }
 
+    /// Skipping past the last song queues the autoplay station first, so skip continues into it
+    /// instead of wrapping to the start of the queue.
     func next() {
-        perform { try await self.player.skipToNextEntry() }
+        perform {
+            if self.isOnLastEntry, self.autoplay, self.repeatMode == .none {
+                await self.queueStationNow()
+            }
+            try await self.player.skipToNextEntry()
+        }
     }
 
     func previous() {
@@ -198,11 +205,26 @@ final class PlayerModel {
     /// and only fills in its tracks once playback begins.
     private func queueStationIfAtEnd() {
         guard autoplay, !autoplayHandled, autoplayTask == nil, repeatMode == .none,
-              duration > 0, duration - elapsed < 20,
-              let entry = player.queue.currentEntry, entry.id == player.queue.entries.last?.id,
-              case .song(let song) = entry.item
+              duration > 0, duration - elapsed < 20, isOnLastEntry
         else { return }
+        startQueueingStation()
+    }
 
+    private var isOnLastEntry: Bool {
+        guard let entry = player.queue.currentEntry else { return false }
+        return entry.id == player.queue.entries.last?.id
+    }
+
+    /// Queues the station right away, joining the near-the-end attempt if it is already running.
+    private func queueStationNow() async {
+        if autoplayTask == nil, !autoplayHandled {
+            startQueueingStation()
+        }
+        await autoplayTask?.value
+    }
+
+    private func startQueueingStation() {
+        guard let entry = player.queue.currentEntry, case .song(let song) = entry.item else { return }
         autoplayTask = Task { [weak self] in
             let station = try? await Self.station(for: song)
             guard let self, !Task.isCancelled else { return }
