@@ -16,6 +16,8 @@ final class PlayerModel {
     private(set) var subtitle: String?
     private(set) var artwork: Artwork?
     private(set) var currentItemID: MusicItemID?
+    /// The song that is playing, when the current entry is one; used to reach its artist page.
+    private(set) var currentSong: Song?
     private(set) var duration: TimeInterval = 0
     private(set) var elapsed: TimeInterval = 0
     private(set) var isShuffled = false
@@ -76,6 +78,17 @@ final class PlayerModel {
         case .playlist(let playlist): play(playlist)
         case .station(let station): play(station)
         @unknown default: break
+        }
+    }
+
+    func play(_ item: MusicCatalogSearchResponse.TopResult) {
+        switch item {
+        case .song(let song): play([song])
+        case .album(let album): play(album)
+        case .playlist(let playlist): play(playlist)
+        case .station(let station): play(station)
+        case .musicVideo(let video): play([Track.musicVideo(video)])
+        default: break
         }
     }
 
@@ -162,12 +175,15 @@ final class PlayerModel {
         switch entry?.item {
         case .song(let song):
             currentItemID = song.id
+            currentSong = song
             duration = song.duration ?? 0
         case .musicVideo(let video):
             currentItemID = video.id
+            currentSong = nil
             duration = video.duration ?? 0
         default:
             currentItemID = nil
+            currentSong = nil
             duration = 0
         }
         elapsed = player.playbackTime

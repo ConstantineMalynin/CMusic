@@ -236,20 +236,56 @@ final class MusicService {
         (try? await artist.with([.albums]).albums).map(Array.init) ?? []
     }
 
-    func searchCatalog(_ term: String) async -> [Song] {
-        guard !term.isEmpty else { return [] }
-        var request = MusicCatalogSearchRequest(term: term, types: [Song.self])
-        request.limit = 25
+    /// The artist of the song that is playing, for navigating to their page. Library songs resolve to their library artist.
+    func artist(for song: Song) async -> Artist? {
         do {
-            return Array(try await request.response().songs)
+            return try await song.with([.artists]).artists?.first
         } catch {
             report(error)
-            return []
+            return nil
+        }
+    }
+
+    /// Searches the catalog across every kind of item at once, like Music.app's search page.
+    func search(_ term: String) async -> SearchResults {
+        guard !term.isEmpty else { return SearchResults() }
+        var request = MusicCatalogSearchRequest(term: term, types: [Artist.self, Album.self, Song.self, Playlist.self])
+        request.includeTopResults = true
+        request.limit = 25
+        do {
+            let response = try await request.response()
+            let results = SearchResults(
+                topResults: Array(response.topResults.prefix(10)),
+                artists: Array(response.artists),
+                albums: Array(response.albums),
+                songs: Array(response.songs),
+                playlists: Array(response.playlists)
+            )
+            let artwork = ArtworkLoader.shared
+            artwork.prefetch(results.topResults.prefix(6).map(\.tileArtwork), points: Metrics.featureTileWidth)
+            artwork.prefetch(results.artists.prefix(8).map(\.tileArtwork), points: Metrics.tileWidth)
+            return results
+        } catch {
+            report(error)
+            return SearchResults()
         }
     }
 
     private func report(_ error: Error) {
         logger.error("search failed: \(String(describing: error), privacy: .public)")
         errorMessage = error.localizedDescription
+    }
+}
+
+/// One catalog search, split by item type.
+struct SearchResults: Equatable {
+    var topResults: [MusicCatalogSearchResponse.TopResult] = []
+    var artists: [Artist] = []
+    var albums: [Album] = []
+    var songs: [Song] = []
+    var playlists: [Playlist] = []
+
+    var isEmpty: Bool {
+        topResults.isEmpty && artists.isEmpty && albums.isEmpty && songs.isEmpty && playlists.isEmpty
     }
 }

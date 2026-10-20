@@ -10,10 +10,12 @@ import SwiftUI
 /// Volume follows the system output, since `ApplicationMusicPlayer` exposes no volume control.
 struct PlayerBar: View {
     var player: PlayerModel
+    /// Called when the artist name is clicked.
+    var openArtist: () -> Void
 
     var body: some View {
         HStack(spacing: 20) {
-            NowPlaying(player: player)
+            NowPlaying(player: player, openArtist: openArtist)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(spacing: 4) {
@@ -42,6 +44,7 @@ struct PlayerBar: View {
 
 private struct NowPlaying: View {
     var player: PlayerModel
+    var openArtist: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -51,13 +54,40 @@ private struct NowPlaying: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).fontWeight(.medium)
                     if let subtitle = player.subtitle {
-                        Text(subtitle).foregroundStyle(.secondary)
+                        if player.currentSong != nil {
+                            LinkText(subtitle, action: openArtist)
+                                .help("Go to Artist")
+                        } else {
+                            Text(subtitle).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .font(.callout)
                 .lineLimit(1)
             }
         }
+    }
+}
+
+/// Secondary text that underlines on hover and acts as a button, for the artist name.
+private struct LinkText: View {
+    var text: String
+    var action: () -> Void
+    @State private var isHovering = false
+
+    init(_ text: String, action: @escaping () -> Void) {
+        self.text = text
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(text)
+                .foregroundStyle(isHovering ? .primary : .secondary)
+                .underline(isHovering)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 

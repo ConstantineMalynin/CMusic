@@ -13,7 +13,8 @@ struct MainView: View {
     @State private var selection: SidebarItem? = .home
     @State private var path = NavigationPath()
     @State private var searchText = ""
-    @State private var searchResults: [Song] = []
+    /// `nil` while a search is in flight.
+    @State private var searchResults: SearchResults? = SearchResults()
 
     var body: some View {
         NavigationSplitView {
@@ -36,15 +37,18 @@ struct MainView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
                 Divider()
-                PlayerBar(player: player)
+                PlayerBar(player: player, openArtist: openCurrentArtist)
             }
         }
         .onChange(of: selection) { path = NavigationPath() }
         .task { await music.refreshAll() }
         .task(id: searchText) {
+            searchResults = nil
             try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
-            searchResults = await music.searchCatalog(searchText)
+            let results = await music.search(searchText)
+            guard !Task.isCancelled else { return }
+            searchResults = results
         }
         .alert(
             "Playback Error",
@@ -57,7 +61,7 @@ struct MainView: View {
     @ViewBuilder
     private var detail: some View {
         if !searchText.isEmpty {
-            SongsView(title: "Search", songs: searchResults)
+            SearchView(term: searchText, results: searchResults)
         } else {
             switch selection ?? .home {
             case .home: HomeView()
@@ -86,6 +90,16 @@ struct MainView: View {
                 if let playlist = music.libraryPlaylists.first(where: { $0.id == id }) {
                     CollectionDetailView(playlist: playlist, music: music).id(id)
                 }
+            }
+        }
+    }
+
+    /// Pushes the playing song's artist page, like clicking the artist name in Music.app.
+    private func openCurrentArtist() {
+        guard let song = player.currentSong else { return }
+        Task {
+            if let artist = await music.artist(for: song) {
+                path.append(Destination.artist(artist))
             }
         }
     }

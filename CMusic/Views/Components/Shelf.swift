@@ -173,11 +173,12 @@ struct FeatureCard<Item: TileDisplayable>: View {
 }
 
 /// Wraps albums and playlists in a navigation link, and plays everything else on double-click.
+/// Items that can't be played, like artists, pass no `play` and get no play button.
 struct ShelfTile<Item: TileDisplayable & Hashable>: View {
     var item: Item
     var isCircle = false
     var feature: String?
-    var play: () -> Void
+    var play: (() -> Void)? = nil
 
     var body: some View {
         Group {
@@ -188,7 +189,7 @@ struct ShelfTile<Item: TileDisplayable & Hashable>: View {
             }
         }
         .modifier(DestinationLink(item: item))
-        .simultaneousGesture(TapGesture(count: 2).onEnded(play))
+        .simultaneousGesture(TapGesture(count: 2).onEnded { play?() })
     }
 }
 
@@ -226,6 +227,13 @@ enum Destination: Hashable {
             switch rec {
             case .album(let album): self = .album(album)
             case .playlist(let playlist): self = .playlist(playlist)
+            default: return nil
+            }
+        case let top as MusicCatalogSearchResponse.TopResult:
+            switch top {
+            case .album(let album): self = .album(album)
+            case .playlist(let playlist): self = .playlist(playlist)
+            case .artist(let artist): self = .artist(artist)
             default: return nil
             }
         default: return nil

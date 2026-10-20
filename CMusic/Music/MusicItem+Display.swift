@@ -79,6 +79,27 @@ extension MusicPersonalRecommendation.Item: TileDisplayable {
     var tileArtwork: Artwork? { wrapped?.tileArtwork }
 }
 
+extension MusicCatalogSearchResponse.TopResult: TileDisplayable {
+    var tileTitle: String { title }
+
+    var tileSubtitle: String {
+        switch self {
+        case .album(let album): album.artistName
+        case .song(let song): song.artistName
+        case .musicVideo(let video): video.artistName
+        case .playlist(let playlist): playlist.curatorName ?? "Playlist"
+        case .artist: "Artist"
+        case .station: "Station"
+        case .curator: "Curator"
+        case .radioShow: "Radio Show"
+        case .recordLabel: "Record Label"
+        @unknown default: ""
+        }
+    }
+
+    var tileArtwork: Artwork? { artwork }
+}
+
 /// A flattened row for the song tables, built from either a `Song` or a `Track`.
 struct TrackRow: Identifiable, Equatable {
     var id: MusicItemID
