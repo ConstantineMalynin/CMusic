@@ -64,8 +64,41 @@ private struct NowPlaying: View {
                 }
                 .font(.callout)
                 .lineLimit(1)
+
+                if let song = player.currentSong {
+                    RatingButtons(song: song)
+                        .padding(.leading, 6)
+                }
             }
         }
+    }
+}
+
+/// Thumbs up and down for the playing song, saved to the user's Apple Music ratings.
+private struct RatingButtons: View {
+    var song: Song
+    @Environment(RatingService.self) private var ratings
+
+    var body: some View {
+        let rating = ratings.rating(for: song)
+        HStack(spacing: 10) {
+            Button("Like", systemImage: rating == .liked ? "hand.thumbsup.fill" : "hand.thumbsup") {
+                Task { await ratings.toggle(.liked, for: song) }
+            }
+            .foregroundStyle(rating == .liked ? Color.accentColor : Color.secondary)
+            .help(rating == .liked ? "Remove Like" : "Like")
+
+            Button("Dislike", systemImage: rating == .disliked ? "hand.thumbsdown.fill" : "hand.thumbsdown") {
+                Task { await ratings.toggle(.disliked, for: song) }
+            }
+            .foregroundStyle(rating == .disliked ? Color.accentColor : Color.secondary)
+            .help(rating == .disliked ? "Remove Dislike" : "Dislike")
+        }
+        .labelStyle(.iconOnly)
+        .buttonStyle(.borderless)
+        .font(.body)
+        .contentTransition(.symbolEffect(.replace))
+        .task(id: song.id) { await ratings.load(song) }
     }
 }
 

@@ -12,12 +12,14 @@ import SwiftUI
 struct CMusicApp: App {
     @State private var music = MusicService()
     @State private var player = PlayerModel()
+    @State private var ratings = RatingService()
 
     var body: some Scene {
         WindowGroup {
             MainView()
                 .environment(music)
                 .environment(player)
+                .environment(ratings)
         }
         .defaultSize(width: 1200, height: 780)
         .commands {
