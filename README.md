@@ -36,6 +36,7 @@ The built-in Music app does a lot, and it can feel heavy doing it. CMusic does o
 - **Playlists:** all your library playlists in the sidebar
 - **Search** for songs across the Apple Music catalog
 - **Player bar:** play/pause, next/previous, shuffle, repeat and a scrubber that seeks on release
+- **Autoplay:** when the queue runs out, a station based on the last song keeps the music going (toggle with ∞)
 - **Sortable song lists:** double-click any row to play from there
 - **Menu bar controls and keyboard shortcuts**, matching Music.app:
 

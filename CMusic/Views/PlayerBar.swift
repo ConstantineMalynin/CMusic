@@ -24,9 +24,14 @@ struct PlayerBar: View {
             }
             .frame(minWidth: 360, idealWidth: 520, maxWidth: 600)
 
-            // Mirrors the now-playing column so the transport controls stay centered.
-            Color.clear
-                .frame(maxWidth: .infinity)
+            // Mirrors the now-playing column's width so the transport controls stay centered.
+            Button("Autoplay", systemImage: "infinity") { player.autoplay.toggle() }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .font(.title3)
+                .foregroundStyle(player.autoplay ? Color.accentColor : Color.secondary)
+                .help(player.autoplay ? "Autoplay On: a similar station plays when the queue ends" : "Autoplay Off")
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)

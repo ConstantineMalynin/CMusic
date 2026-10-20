@@ -43,6 +43,7 @@ struct ControlsCommands: Commands {
 
             Toggle("Shuffle", isOn: Binding(get: { player.isShuffled }, set: { _ in player.toggleShuffle() }))
             Button("Repeat: \(repeatLabel)", action: player.cycleRepeat)
+            Toggle("Autoplay", isOn: Binding(get: { player.autoplay }, set: { player.autoplay = $0 }))
         }
     }
 
