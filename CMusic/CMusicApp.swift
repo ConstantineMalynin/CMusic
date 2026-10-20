@@ -10,9 +10,15 @@ import SwiftUI
 
 @main
 struct CMusicApp: App {
-    @State private var music = MusicService()
+    @State private var music: MusicService
     @State private var player = PlayerModel()
-    @State private var ratings = RatingService()
+    @State private var ratings: RatingService
+
+    init() {
+        let music = MusicService()
+        _music = State(initialValue: music)
+        _ratings = State(initialValue: RatingService(music: music))
+    }
 
     var body: some Scene {
         WindowGroup {

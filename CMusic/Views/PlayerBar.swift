@@ -67,7 +67,7 @@ private struct NowPlaying: View {
 
                 if let song = player.currentSong {
                     RatingButtons(song: song)
-                        .padding(.leading, 6)
+                        .padding(.leading, 10)
                 }
             }
         }
@@ -81,7 +81,7 @@ private struct RatingButtons: View {
 
     var body: some View {
         let rating = ratings.rating(for: song)
-        HStack(spacing: 10) {
+        HStack(spacing: 14) {
             Button("Like", systemImage: rating == .liked ? "hand.thumbsup.fill" : "hand.thumbsup") {
                 Task { await ratings.toggle(.liked, for: song) }
             }
@@ -96,7 +96,7 @@ private struct RatingButtons: View {
         }
         .labelStyle(.iconOnly)
         .buttonStyle(.borderless)
-        .font(.body)
+        .font(.title3)
         .contentTransition(.symbolEffect(.replace))
         .task(id: song.id) { await ratings.load(song) }
     }

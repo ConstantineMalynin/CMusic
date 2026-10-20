@@ -126,6 +126,11 @@ final class MusicService {
         return try await request.response()
     }
 
+    /// Refreshes the sidebar after the app creates a playlist.
+    func reloadPlaylists() async {
+        await loadLibraryPlaylists()
+    }
+
     /// Loaded with the first wave because the sidebar lists them.
     private func loadLibraryPlaylists() async {
         libraryPlaylists = await fetch("library playlists") {

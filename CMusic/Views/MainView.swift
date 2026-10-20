@@ -10,6 +10,7 @@ import SwiftUI
 struct MainView: View {
     @Environment(MusicService.self) private var music
     @Environment(PlayerModel.self) private var player
+    @Environment(RatingService.self) private var ratings
     @State private var selection: SidebarItem? = .home
     @State private var path = NavigationPath()
     @State private var searchText = ""
@@ -55,6 +56,12 @@ struct MainView: View {
             isPresented: Binding(get: { player.errorMessage != nil }, set: { if !$0 { player.clearError() } }),
             actions: {},
             message: { Text(player.errorMessage ?? "") }
+        )
+        .alert(
+            "Rating Error",
+            isPresented: Binding(get: { ratings.errorMessage != nil }, set: { if !$0 { ratings.clearError() } }),
+            actions: {},
+            message: { Text(ratings.errorMessage ?? "") }
         )
     }
 
