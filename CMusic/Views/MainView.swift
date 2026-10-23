@@ -3,6 +3,7 @@
 //  CMusic
 //
 
+import AppKit
 import MusicKit
 import SwiftUI
 
@@ -61,6 +62,10 @@ struct MainView: View {
             }
         }
         .task { await music.refreshAll() }
+        // Coming back to the app after a while gives Home a fresh arrangement, like Music.app.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await music.refreshHomeIfStale() }
+        }
         .task(id: searchText) {
             searchResults = nil
             try? await Task.sleep(for: .milliseconds(300))

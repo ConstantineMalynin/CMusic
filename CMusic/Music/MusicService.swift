@@ -28,6 +28,11 @@ final class MusicService {
     private(set) var topSongs: [Song] = []
     private(set) var topAlbums: [Album] = []
     private(set) var topPlaylists: [Playlist] = []
+    /// Changes on every personalized load, so Home can arrange the same recommendations differently each
+    /// time, the way Music.app's Home tab varies between visits.
+    private(set) var homeArrangementSeed = UInt64.random(in: .min ... .max)
+    private(set) var isRefreshingHome = false
+    @ObservationIgnored private var lastHomeRefresh: Date?
 
     // Library. Everything but playlists loads on demand through `load(_:)`.
     private(set) var librarySongs: [Song] = []
@@ -74,6 +79,25 @@ final class MusicService {
         refreshTask = nil
     }
 
+    /// Reloads only the Home, New and Radio content, leaving the library alone.
+    func refreshHome() async {
+        guard isAuthorized, !isRefreshingHome else { return }
+        if let refreshTask { return await refreshTask.value }
+        isRefreshingHome = true
+        defer { isRefreshingHome = false }
+        errorMessage = nil
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.loadPersonalized() }
+            group.addTask { await self.loadCharts() }
+        }
+    }
+
+    /// Called when the app comes back to the front: Home refreshes if it has been a while, like Music.app.
+    func refreshHomeIfStale(after interval: Duration = .seconds(10 * 60)) async {
+        guard let lastHomeRefresh, Date.now.timeIntervalSince(lastHomeRefresh) > interval.timeInterval else { return }
+        await refreshHome()
+    }
+
     // MARK: - Loading
 
     private func loadSubscription() async {
@@ -91,6 +115,8 @@ final class MusicService {
         }
         recommendations = await recs ?? []
         recentlyPlayed = await recent ?? []
+        homeArrangementSeed = .random(in: .min ... .max)
+        lastHomeRefresh = .now
 
         let artwork = ArtworkLoader.shared
         if let topPicks = recommendations.first {
@@ -354,5 +380,12 @@ private extension String {
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private extension Duration {
+    var timeInterval: TimeInterval {
+        let (seconds, attoseconds) = components
+        return TimeInterval(seconds) + TimeInterval(attoseconds) / 1e18
     }
 }
