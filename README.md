@@ -31,7 +31,7 @@ The built-in Music app does a lot, and it can feel heavy doing it. CMusic does o
 
 ## Features
 
-- **Discover:** Home with personal recommendations and Recently Played, New releases, and Radio stations
+- **Discover:** Home with personal recommendations and Recently Played, New releases, Radio stations, and CJSR 88.5 FM (Edmonton) live
 - **Library:** Recently Added, Artists, Albums, Songs, Made for You, Music Videos
 - **Playlists:** all your library playlists in the sidebar
 - **Search** for songs across the Apple Music catalog

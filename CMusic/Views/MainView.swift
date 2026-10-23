@@ -97,6 +97,7 @@ struct MainView: View {
             case .home: HomeView()
             case .new: NewView()
             case .radio: RadioView()
+            case .cjsr: LiveStreamView(stream: .cjsr)
             case .recentlyAdded:
                 ItemGridView(title: "Recently Added", items: music.recentlyAdded) { player.play($0) }
                     .librarySection(.recentlyAdded, isEmpty: music.recentlyAdded.isEmpty, item: .recentlyAdded)

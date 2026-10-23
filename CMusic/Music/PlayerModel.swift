@@ -3,8 +3,10 @@
 //  CMusic
 //
 
+import AVFoundation
 import Combine
 import Foundation
+import MediaPlayer
 import MusicKit
 import Observation
 
@@ -21,8 +23,10 @@ final class PlayerModel {
     private(set) var duration: TimeInterval = 0
     private(set) var elapsed: TimeInterval = 0
     private(set) var isShuffled = false
-    private(set) var repeatMode: MusicPlayer.RepeatMode = .none
+    private(set) var repeatMode: MusicKit.MusicPlayer.RepeatMode = .none
     private(set) var errorMessage: String?
+    /// The internet radio station that is playing instead of the Apple Music queue, if any.
+    private(set) var liveStream: LiveStream?
 
     /// When the queue reaches its last song, follow it with that song's station, like Music.app's ∞.
     var autoplay = UserDefaults.standard.object(forKey: "autoplay") as? Bool ?? true {
@@ -32,6 +36,10 @@ final class PlayerModel {
     var hasCurrentEntry: Bool { title != nil }
 
     @ObservationIgnored private let player = ApplicationMusicPlayer.shared
+    @ObservationIgnored private var streamPlayer: AVPlayer?
+    @ObservationIgnored private var streamObservation: NSKeyValueObservation?
+    /// Media-key handlers registered while a stream plays; MusicKit handles the keys for its own queue.
+    @ObservationIgnored private var remoteCommandTargets: [(MPRemoteCommand, Any)] = []
     @ObservationIgnored private var stateObservation: AnyCancellable?
     @ObservationIgnored private var queueObservation: AnyCancellable?
     @ObservationIgnored private var clock: Task<Void, Never>?
@@ -101,7 +109,90 @@ final class PlayerModel {
         }
     }
 
+    /// Plays an internet radio station, replacing whatever Apple Music was playing.
+    func play(_ stream: LiveStream) {
+        if liveStream == stream {
+            streamPlayer?.play()
+            return
+        }
+        stopStream()
+        player.pause()
+        errorMessage = nil
+
+        let item = AVPlayerItem(url: stream.url)
+        let avPlayer = AVPlayer(playerItem: item)
+        streamPlayer = avPlayer
+        liveStream = stream
+        streamObservation = avPlayer.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] _, _ in
+            Task { @MainActor in self?.syncStream() }
+        }
+        avPlayer.play()
+        registerRemoteCommands()
+        syncStream()
+    }
+
+    // MARK: - Media keys for the stream
+
+    /// Without a Now Playing registration the play/pause key opens Music.app, so claim it for the stream.
+    private func registerRemoteCommands() {
+        let center = MPRemoteCommandCenter.shared()
+        func handle(_ command: MPRemoteCommand, _ action: @escaping () -> Void) {
+            let target = command.addTarget { [weak self] _ in
+                guard self?.liveStream != nil else { return .noActionableNowPlayingItem }
+                action()
+                return .success
+            }
+            remoteCommandTargets.append((command, target))
+        }
+        handle(center.togglePlayPauseCommand) { [weak self] in self?.togglePlayPause() }
+        handle(center.playCommand) { [weak self] in
+            guard let self, !self.isPlaying else { return }
+            self.togglePlayPause()
+        }
+        handle(center.pauseCommand) { [weak self] in self?.streamPlayer?.pause() }
+        for command in [center.nextTrackCommand, center.previousTrackCommand, center.changePlaybackPositionCommand] {
+            command.isEnabled = false
+        }
+    }
+
+    private func unregisterRemoteCommands() {
+        for (command, target) in remoteCommandTargets {
+            command.removeTarget(target)
+        }
+        remoteCommandTargets = []
+        let center = MPRemoteCommandCenter.shared()
+        for command in [center.nextTrackCommand, center.previousTrackCommand, center.changePlaybackPositionCommand] {
+            command.isEnabled = true
+        }
+        let info = MPNowPlayingInfoCenter.default()
+        info.nowPlayingInfo = nil
+        info.playbackState = .stopped
+    }
+
+    private func updateNowPlaying(for stream: LiveStream) {
+        let info = MPNowPlayingInfoCenter.default()
+        info.nowPlayingInfo = [
+            MPMediaItemPropertyTitle: stream.name,
+            MPMediaItemPropertyArtist: stream.subtitle,
+            MPNowPlayingInfoPropertyIsLiveStream: true,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+        ]
+        info.playbackState = isPlaying ? .playing : .paused
+    }
+
+    /// Tears down the radio stream, so the Apple Music queue is what the bar shows again.
+    private func stopStream() {
+        guard liveStream != nil else { return }
+        unregisterRemoteCommands()
+        streamObservation = nil
+        streamPlayer?.pause()
+        streamPlayer = nil
+        liveStream = nil
+        sync()
+    }
+
     private func start(_ queue: ApplicationMusicPlayer.Queue, isStation: Bool = false) {
+        stopStream()
         autoplayTask?.cancel()
         autoplayTask = nil
         autoplayHandled = isStation
@@ -114,7 +205,15 @@ final class PlayerModel {
     // MARK: - Transport
 
     func togglePlayPause() {
-        if isPlaying {
+        if let streamPlayer {
+            if isPlaying {
+                streamPlayer.pause()
+            } else {
+                // A paused live stream has fallen behind; rejoining live is what a radio does.
+                streamPlayer.seek(to: .positiveInfinity)
+                streamPlayer.play()
+            }
+        } else if isPlaying {
             player.pause()
         } else if hasCurrentEntry {
             perform { try await self.player.play() }
@@ -124,6 +223,7 @@ final class PlayerModel {
     /// Skipping past the last song queues the autoplay station first, so skip continues into it
     /// instead of wrapping to the start of the queue.
     func next() {
+        guard liveStream == nil else { return }
         perform {
             if self.isOnLastEntry, self.autoplay, self.repeatMode == .none {
                 await self.queueStationNow()
@@ -133,6 +233,7 @@ final class PlayerModel {
     }
 
     func previous() {
+        guard liveStream == nil else { return }
         if player.playbackTime > 3 {
             player.restartCurrentEntry()
         } else {
@@ -153,7 +254,7 @@ final class PlayerModel {
         player.state.repeatMode = switch repeatMode {
         case .none: .all
         case .all: .one
-        default: MusicPlayer.RepeatMode.none
+        default: MusicKit.MusicPlayer.RepeatMode.none
         }
     }
 
@@ -170,7 +271,27 @@ final class PlayerModel {
         }
     }
 
+    /// Mirrors the radio stream into the same fields the Apple Music queue fills.
+    private func syncStream() {
+        guard let liveStream, let streamPlayer else { return }
+        isPlaying = streamPlayer.timeControlStatus != .paused
+        title = liveStream.name
+        subtitle = liveStream.subtitle
+        artwork = nil
+        currentItemID = nil
+        currentSong = nil
+        duration = 0
+        elapsed = 0
+        stopClock()
+        updateNowPlaying(for: liveStream)
+        if let error = streamPlayer.currentItem?.error ?? streamPlayer.error {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func sync() {
+        // While a radio stream plays, the idle Apple Music queue must not take over the bar.
+        guard liveStream == nil else { return }
         isPlaying = player.state.playbackStatus == .playing
         isShuffled = player.state.shuffleMode == .songs
         repeatMode = player.state.repeatMode ?? .none
