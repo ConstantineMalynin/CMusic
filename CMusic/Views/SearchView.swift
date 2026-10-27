@@ -157,15 +157,56 @@ private struct TopResultCard: View {
 }
 
 /// Wraps a view in a navigation link when the item has a page.
+///
+/// A trackpad pinch over a tile, which the hand does out of web habit while scrolling, must not open the item:
+/// the pinch is claimed by a magnify gesture so it never reaches the link, and the link ignores clicks for
+/// as long as a pinch is in flight.
 struct DestinationLinkModifier<Item: Hashable>: ViewModifier {
     var item: Item
+
+    @State private var pinch = PinchMonitor.shared
 
     func body(content: Content) -> some View {
         if let destination = Destination(item) {
             NavigationLink(value: destination) { content }
                 .buttonStyle(.plain)
+                .allowsHitTesting(!pinch.isPinching)
+                .highPriorityGesture(MagnifyGesture())
         } else {
             content
+        }
+    }
+}
+
+/// Tracks whether a trackpad pinch is in progress anywhere in the app, from the raw events, which arrive
+/// before SwiftUI turns any of them into a click.
+@Observable @MainActor
+final class PinchMonitor {
+    static let shared = PinchMonitor()
+
+    private(set) var isPinching = false
+    private var monitor: Any?
+    private var release: Task<Void, Never>?
+
+    private init() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .magnify) { [weak self] event in
+            self?.handle(event)
+            return event
+        }
+    }
+
+    private func handle(_ event: NSEvent) {
+        release?.cancel()
+        switch event.phase {
+        case .ended, .cancelled:
+            // Any click SwiftUI synthesizes from the pinch lands right after it ends; keep ignoring for a beat.
+            release = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                isPinching = false
+            }
+        default:
+            isPinching = true
         }
     }
 }
