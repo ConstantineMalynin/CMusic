@@ -35,6 +35,13 @@ final class PlayerModel {
 
     var hasCurrentEntry: Bool { title != nil }
 
+    /// Called once per queue entry, when a song has been listened to long enough to count as a play.
+    @ObservationIgnored var onSongListened: ((Song) -> Void)?
+    /// Seconds of the current entry actually heard, accumulated from clock ticks so seeking doesn't count.
+    @ObservationIgnored private var listened: TimeInterval = 0
+    @ObservationIgnored private var listenedEntryID: String?
+    @ObservationIgnored private var lastTickElapsed: TimeInterval?
+
     @ObservationIgnored private let player = ApplicationMusicPlayer.shared
     @ObservationIgnored private var streamPlayer: AVPlayer?
     @ObservationIgnored private var streamObservation: NSKeyValueObservation?
@@ -315,8 +322,28 @@ final class PlayerModel {
             duration = 0
         }
         elapsed = player.playbackTime
+        if entry?.id != listenedEntryID {
+            listenedEntryID = entry?.id
+            listened = 0
+            lastTickElapsed = nil
+        }
         isPlaying ? startClock() : stopClock()
         skipRepeatedSeedSong()
+    }
+
+    /// Counts a play once the listener has heard half the song, or four minutes of it, like scrobblers do.
+    /// Short clips need at least ten seconds, so a skipped intro never counts.
+    private func trackListening() {
+        defer { lastTickElapsed = elapsed }
+        guard let song = currentSong, let last = lastTickElapsed, listenedEntryID != nil else { return }
+        let delta = elapsed - last
+        guard delta > 0, delta < 2 else { return }
+        listened += delta
+        let threshold = duration > 0 ? max(10, min(duration / 2, 240)) : 30
+        if listened >= threshold {
+            listened = -.infinity
+            onSongListened?(song)
+        }
     }
 
     // MARK: - Autoplay
@@ -407,6 +434,7 @@ final class PlayerModel {
                 try? await Task.sleep(for: .milliseconds(500))
                 guard let self else { return }
                 self.elapsed = self.player.playbackTime
+                self.trackListening()
                 self.queueStationIfAtEnd()
             }
         }

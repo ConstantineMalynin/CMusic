@@ -7,7 +7,7 @@ import MusicKit
 import SwiftUI
 
 enum SidebarItem: Hashable {
-    case home, new, radio, cjsr
+    case home, new, radio, cjsr, taste
     case recentlyAdded, artists, albums, songs, madeForYou, musicVideos
     case allPlaylists
     case playlist(Playlist.ID)
@@ -18,6 +18,7 @@ enum SidebarItem: Hashable {
         case .new: "New"
         case .radio: "Radio"
         case .cjsr: LiveStream.cjsr.name
+        case .taste: "Your Taste"
         case .recentlyAdded: "Recently Added"
         case .artists: "Artists"
         case .albums: "Albums"
@@ -35,6 +36,7 @@ enum SidebarItem: Hashable {
         case .new: "square.grid.2x2"
         case .radio: "dot.radiowaves.left.and.right"
         case .cjsr: "antenna.radiowaves.left.and.right"
+        case .taste: "chart.pie"
         case .recentlyAdded: "clock"
         case .artists: "music.microphone"
         case .albums: "square.stack"
@@ -46,7 +48,7 @@ enum SidebarItem: Hashable {
         }
     }
 
-    static let discover: [SidebarItem] = [.home, .new, .radio, .cjsr]
+    static let discover: [SidebarItem] = [.home, .new, .radio, .cjsr, .taste]
     static let library: [SidebarItem] = [.recentlyAdded, .artists, .albums, .songs, .madeForYou, .musicVideos]
 }
 

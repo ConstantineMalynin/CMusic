@@ -13,11 +13,13 @@ struct CMusicApp: App {
     @State private var music: MusicService
     @State private var player = PlayerModel()
     @State private var ratings: RatingService
+    @State private var history: ListeningHistory
 
     init() {
         let music = MusicService()
         _music = State(initialValue: music)
         _ratings = State(initialValue: RatingService(music: music))
+        _history = State(initialValue: ListeningHistory())
     }
 
     var body: some Scene {
@@ -26,6 +28,7 @@ struct CMusicApp: App {
                 .environment(music)
                 .environment(player)
                 .environment(ratings)
+                .environment(history)
         }
         .defaultSize(width: 1200, height: 780)
         .commands {

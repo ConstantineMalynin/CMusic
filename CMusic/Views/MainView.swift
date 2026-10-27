@@ -12,6 +12,7 @@ struct MainView: View {
     @Environment(MusicService.self) private var music
     @Environment(PlayerModel.self) private var player
     @Environment(RatingService.self) private var ratings
+    @Environment(ListeningHistory.self) private var history
     @State private var selection: SidebarItem? = .home
     @State private var path = NavigationPath()
     @State private var searchText = ""
@@ -62,6 +63,7 @@ struct MainView: View {
             }
         }
         .task { await music.refreshAll() }
+        .onAppear { player.onSongListened = { [history] song in history.record(song) } }
         // Coming back to the app after a while gives Home a fresh arrangement, like Music.app.
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await music.refreshHomeIfStale() }
@@ -98,6 +100,14 @@ struct MainView: View {
             case .new: NewView()
             case .radio: RadioView()
             case .cjsr: LiveStreamView(stream: .cjsr)
+            case .taste:
+                TasteView(
+                    songs: music.librarySongs,
+                    genres: music.libraryGenres,
+                    isLoadingGenres: !music.loadedSections.contains(.genres)
+                )
+                .librarySection(.songs, isEmpty: music.librarySongs.isEmpty, item: .songs)
+                .task(id: music.libraryGeneration) { await music.load(.genres) }
             case .recentlyAdded:
                 ItemGridView(title: "Recently Added", items: music.recentlyAdded) { player.play($0) }
                     .librarySection(.recentlyAdded, isEmpty: music.recentlyAdded.isEmpty, item: .recentlyAdded)

@@ -12,7 +12,7 @@ private let logger = Logger(subsystem: "com.localStuff.CMusic", category: "Music
 
 /// Library content that is fetched on first visit to its sidebar item rather than at launch.
 enum LibrarySection: Hashable {
-    case songs, albums, artists, musicVideos, recentlyAdded
+    case songs, albums, artists, musicVideos, recentlyAdded, genres
 }
 
 /// Loads catalog, library and personalized content from Apple Music via MusicKit.
@@ -41,6 +41,9 @@ final class MusicService {
     private(set) var libraryArtists: [Artist] = []
     private(set) var libraryPlaylists: [Playlist] = []
     private(set) var libraryMusicVideos: [MusicVideo] = []
+    /// Genre names per library song ID, most specific first. Library songs from `MusicLibraryRequest`
+    /// carry no genres on macOS, so these come from the Apple Music API's library endpoint instead.
+    private(set) var libraryGenres: [String: [String]] = [:]
     private(set) var loadedSections: Set<LibrarySection> = []
     /// Bumped by `refreshAll()`, so visible library views can key their `.task` on it and reload.
     private(set) var libraryGeneration = 0
@@ -209,7 +212,52 @@ final class MusicService {
                 return Array(try await request.response().items)
             }
             if isCurrent() { recentlyAdded = added ?? [] }
+        case .genres:
+            await loadLibraryGenres(isCurrent: isCurrent)
         }
+    }
+
+    /// Pages through the library on the web API, which is the only place library songs expose genres.
+    /// Including the catalog record adds each song's parent genre ("Alternative" for "Punk"), which is
+    /// what the catalog charts are organized by.
+    private func loadLibraryGenres(isCurrent: () -> Bool) async {
+        struct Page: Decodable {
+            struct Item: Decodable {
+                struct Attributes: Decodable { var genreNames: [String]? }
+                struct Relationships: Decodable {
+                    struct Catalog: Decodable { var data: [Item] }
+                    var catalog: Catalog?
+                }
+                var id: String
+                var attributes: Attributes?
+                var relationships: Relationships?
+            }
+            var data: [Item]
+            var next: String?
+        }
+
+        var genres: [String: [String]] = [:]
+        var path: String? = "/v1/me/library/songs?limit=100&include=catalog"
+        while let next = path {
+            guard let page = await fetch("library genres", {
+                let url = URL(string: "https://api.music.apple.com\(next)")!
+                let response = try await MusicDataRequest(urlRequest: URLRequest(url: url)).response()
+                return try JSONDecoder().decode(Page.self, from: response.data)
+            }) else { break }
+            guard isCurrent() else { return }
+            for item in page.data {
+                var names = item.attributes?.genreNames ?? []
+                for catalog in item.relationships?.catalog?.data ?? [] {
+                    for name in catalog.attributes?.genreNames ?? [] where !names.contains(name) {
+                        names.append(name)
+                    }
+                }
+                genres[item.id] = names.filter { $0 != "Music" }
+            }
+            libraryGenres = genres
+            path = page.next.map { $0.contains("include=") ? $0 : $0 + "&include=catalog" }
+        }
+        if isCurrent() { libraryGenres = genres }
     }
 
     /// Paged, so the Songs table fills with the first page while the rest of a large library streams in.
@@ -346,6 +394,64 @@ final class MusicService {
         logger.error("search failed: \(String(describing: error), privacy: .public)")
         errorMessage = error.localizedDescription
     }
+
+    // MARK: - Genres
+
+    /// Apple's top-level catalog genres, fetched once. Library songs name their genres with these same
+    /// names ("Rock", "Hip-Hop/Rap"), which is how the Taste page maps a library genre to its chart.
+    @ObservationIgnored private var genresTask: Task<[Genre], Never>?
+
+    private func catalogGenres() async -> [Genre] {
+        if let genresTask { return await genresTask.value }
+        let task = Task<[Genre], Never> {
+            do {
+                let storefront = try await MusicDataRequest.currentCountryCode
+                let url = URL(string: "https://api.music.apple.com/v1/catalog/\(storefront)/genres")!
+                let response = try await MusicDataRequest(urlRequest: URLRequest(url: url)).response()
+                return Array(try JSONDecoder().decode(MusicItemCollection<Genre>.self, from: response.data))
+            } catch {
+                logger.error("genres failed: \(String(describing: error), privacy: .public)")
+                return []
+            }
+        }
+        genresTask = task
+        return await task.value
+    }
+
+    /// The most-played catalog songs and albums for the first of `names` that is a chartable catalog genre.
+    /// Library genres are often subgenres ("Punk"); their parent ("Alternative") is what has a chart.
+    func genreChart(for names: [String]) async -> GenreChart {
+        let genres = await catalogGenres()
+        guard let genre = names.lazy.compactMap({ name in
+            genres.first { $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame }
+        }).first else {
+            return GenreChart()
+        }
+        let name = genre.name
+        async let songs = fetch("\(name) song chart") {
+            var request = MusicCatalogChartsRequest(genre: genre, kinds: [.mostPlayed], types: [Song.self])
+            request.limit = 20
+            return try await request.response().songCharts.first.map { Array($0.items) } ?? []
+        }
+        async let albums = fetch("\(name) album chart") {
+            var request = MusicCatalogChartsRequest(genre: genre, kinds: [.mostPlayed], types: [Album.self])
+            request.limit = 20
+            return try await request.response().albumCharts.first.map { Array($0.items) } ?? []
+        }
+        let chart = GenreChart(genreName: name, songs: await songs ?? [], albums: await albums ?? [])
+        let artwork = ArtworkLoader.shared
+        artwork.prefetch(chart.songs.prefix(10).map(\.artwork), points: Metrics.songTileWidth)
+        artwork.prefetch(chart.albums.prefix(8).map(\.artwork), points: Metrics.tileWidth)
+        return chart
+    }
+}
+
+/// What is popular in one genre across Apple Music.
+struct GenreChart: Equatable {
+    /// The catalog genre the chart is for, which may be a parent of the library genre.
+    var genreName: String?
+    var songs: [Song] = []
+    var albums: [Album] = []
 }
 
 /// One catalog search, split by item type.

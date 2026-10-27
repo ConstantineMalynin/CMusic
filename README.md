@@ -32,6 +32,7 @@ The built-in Music app does a lot, and it can feel heavy doing it. CMusic does o
 ## Features
 
 - **Discover:** Home with personal recommendations and Recently Played, New releases, Radio stations, and CJSR 88.5 FM (Edmonton) live
+- **Your Taste:** a breakdown of your library by genre, weighted by play count, with your most played songs and artists in each genre, whether it's rising or fading, and what's topping that genre's chart right now. CMusic also keeps its own listening history on this Mac, so streaming counts even for songs you never add to the library
 - **Library:** Recently Added, Artists, Albums, Songs, Made for You, Music Videos
 - **Playlists:** all your library playlists in the sidebar
 - **Search** for songs across the Apple Music catalog
